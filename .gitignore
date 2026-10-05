@@ -1,0 +1,31 @@
+# Dependencies (recreated with `npm install`)
+node_modules/
+
+# Build output (recreated with `npm run build`)
+dist/
+
+# Environment variables and secrets (never commit these)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage output
+coverage/
+
+# Local databases (e.g. SQLite files created while developing)
+*.sqlite
+*.sqlite3
+*.db
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
