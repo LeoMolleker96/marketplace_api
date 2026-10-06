@@ -1,0 +1,20 @@
+# Local development database. Start it with `docker compose up -d`.
+# Values like ${POSTGRES_USER} are read automatically from the `.env` file.
+services:
+  db:
+    # Official PostgreSQL 18 image, on a small Linux base (Alpine).
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # <your PC>:<container>. The 127.0.0.1 prefix means only your own PC can
+      # connect, not other devices on your network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Keeps the data in a Docker volume, so it survives container restarts.
+      - postgres-data:/var/lib/postgresql
+
+volumes:
+  postgres-data:
