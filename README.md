@@ -1,219 +1,166 @@
 # Marketplace API
 
-Backend for the Flutter marketplace app (`../marketplace_app`).
+Backend for the Flutter marketplace app (`../marketplace_app`). Node.js + TypeScript, hexagonal architecture.
 
-**Purpose: learning.** This project uses vanilla Node.js (no Express or other framework) and TypeScript, so the fundamentals of backend development stay visible. This README documents every step used to create the project and why.
+> Why things are built the way they are: see [DECISIONS.md](DECISIONS.md).
 
-## Quick start
+## Prerequisites
 
-```bash
-npm install
-npm run dev
-```
-
-Then open <http://localhost:3000/health>. You should see `{"status":"ok"}`.
-
-| Script              | What it does                                                        |
-| ------------------- | ------------------------------------------------------------------- |
-| `npm run dev`       | Runs `src/index.ts` and restarts automatically when you save a file |
-| `npm run build`     | Compiles TypeScript (`src/`) to JavaScript (`dist/`)                |
-| `npm start`         | Runs the compiled build (`dist/index.js`), as you would in production |
-| `npm run typecheck` | Checks types without producing any files                            |
-
-> From the Flutter app on an **Android emulator**, `localhost` is the emulator itself. Use `http://10.0.2.2:3000` to reach your computer. On iOS simulator, `localhost` works.
-
----
-
-## How this project was created, step by step
-
-### 0. Prerequisites
-
-Node.js and npm installed. Versions used: Node `v26.10.0`, npm `11.19.1`.
+- Node.js **v26** or newer and npm **11** or newer
+- **Docker Desktop** (for the PostgreSQL database). Install it from <https://www.docker.com/products/docker-desktop> with the **WSL 2** option enabled, then start it.
 
 ```bash
 node -v
 npm -v
+docker --version
+docker compose version
 ```
 
-### 1. Create the project folder
+> **Windows PowerShell:** if `npm` fails with *"running scripts is disabled on this system"*, either use `npm.cmd` instead of `npm` (e.g. `npm.cmd run dev`), or allow local scripts for your user once (then reopen the terminal):
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+> ```
+
+## Install
 
 ```bash
-mkdir marketplace_api
-cd marketplace_api
-mkdir src
+npm install
 ```
 
-All source code lives in `src/`. Compiled output will go to `dist/` (generated, not edited by hand).
+## Environment variables
 
-### 2. Initialize npm
+Create a `.env` file in the project root (it is git-ignored, never commit it) with:
+
+| Variable | Example | Used for |
+| --- | --- | --- |
+| `POSTGRES_USER` | `marketplace` | Database user created by Docker |
+| `POSTGRES_PASSWORD` | *(choose one)* | That user's password |
+| `POSTGRES_DB` | `marketplace` | Database name created by Docker |
+| `DATABASE_URL` | `postgresql://marketplace:<password>@localhost:5432/marketplace` | How the API connects to the database. Must match the three values above. |
+| `JWT_SECRET` | *(a random string of 32+ characters)* | Signs login tokens. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` |
+
+The app refuses to start if `DATABASE_URL` or `JWT_SECRET` is missing.
+
+## Database (PostgreSQL in Docker)
+
+Start the database (in the background):
 
 ```bash
-npm init -y
+docker compose up -d
 ```
 
-This creates `package.json`, the file that describes the project: its name, scripts, and dependencies. `-y` accepts all defaults.
-
-### 3. Install TypeScript tooling
+Check that it is running:
 
 ```bash
-npm install -D typescript @types/node tsx
+docker compose ps
 ```
 
-`-D` means *dev dependency*: needed while developing, not at runtime in production.
-
-| Package        | Why                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------ |
-| `typescript`   | The compiler (`tsc`). Checks types and turns `.ts` into `.js`, which is what Node actually runs. |
-| `@types/node`  | Type definitions for Node's built-in modules (`http`, `fs`, ...) so TypeScript understands them. |
-| `tsx`          | Runs `.ts` files directly and supports watch mode. Only for development convenience.             |
-
-There are no runtime dependencies. The server uses only what ships with Node.
-
-### 4. Configure TypeScript (`tsconfig.json`)
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "src",
-    "outDir": "dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["src"]
-}
-```
-
-| Option                         | Meaning                                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `target: ES2022`               | Which JavaScript version to emit. Modern Node supports it natively.                      |
-| `module` / `moduleResolution: NodeNext` | Use the same module rules as modern Node. **Consequence:** when importing your own files, write the `.js` extension: `import { x } from "./x.js"` (even though the source file is `.ts`). |
-| `rootDir` / `outDir`           | Read from `src/`, write to `dist/`.                                                      |
-| `strict: true`                 | Turns on all strict type checks. Keep it on; it catches most bugs early.                 |
-| `esModuleInterop`              | Smoother imports of older CommonJS packages.                                             |
-| `skipLibCheck`                 | Don't type-check `node_modules` declaration files (faster builds).                       |
-| `types: ["node"]`              | Include Node's type definitions.                                                         |
-| `include: ["src"]`             | Only compile files in `src/`.                                                            |
-
-### 5. Write the first server (`src/index.ts`)
-
-```ts
-import { createServer } from "node:http";
-
-const PORT = 3000;
-
-const server = createServer((req, res) => {
-  console.log(`${req.method} ${req.url}`);
-
-  if (req.method === "GET" && req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
-    return;
-  }
-
-  res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found" }));
-});
-
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
-```
-
-Concepts shown here:
-
-- **`node:http`**: Node's built-in HTTP module. The `node:` prefix marks it as a built-in. Frameworks like Express are built on top of it.
-- **`createServer(callback)`**: the callback runs once for **every** incoming request.
-- **`req`** (request): what the client sent: method (`GET`, `POST`, ...), URL, headers, body.
-- **`res`** (response): what we send back: status code, headers, body.
-- **Status codes**: `200` = OK, `404` = not found.
-- **`Content-Type: application/json`**: tells the client how to read the body. Flutter's `jsonDecode` expects JSON.
-- **`listen(PORT)`**: starts accepting connections on that port.
-- **Routing by hand**: the `if` checks on method and URL are the simplest possible router. Frameworks automate this.
-
-### 6. Add scripts to `package.json`
+Create or update the tables (apply the migrations in `drizzle/`). Run this after the first start and whenever new migrations are added:
 
 ```bash
-npm pkg set name=marketplace-api \
-  main=dist/index.js \
-  scripts.dev="tsx watch src/index.ts" \
-  scripts.build=tsc \
-  scripts.start="node dist/index.js" \
-  scripts.typecheck="tsc --noEmit"
+npm run db:migrate
 ```
 
-(Equivalent to editing the `scripts` section of `package.json` by hand.)
-
-### 7. Add `.gitignore`
-
-```
-node_modules
-dist
-.env
-```
-
-- `node_modules`: installed packages; recreated by `npm install`.
-- `dist`: generated by the build.
-- `.env`: will hold secrets (database passwords, JWT keys). **Never commit it.**
-
-### 8. Verify it works
+Run the tests that need the database (the normal `npm test` skips them):
 
 ```bash
-npm run build            # should finish with no errors
-npm start                # in one terminal
+npm run test:db
 ```
 
-In another terminal:
+Open a SQL prompt inside it (`\dt` lists tables, `\q` quits):
+
+```bash
+docker compose exec db psql -U marketplace -d marketplace
+```
+
+| Command | What it does |
+| --- | --- |
+| `docker compose up -d` | Start the database |
+| `docker compose stop` | Stop it (data is kept) |
+| `docker compose down` | Remove the container (data is kept in the volume) |
+| `docker compose down -v` | Remove everything **including all data** (clean reset) |
+| `docker compose logs db` | Show the database logs |
+
+## Run
+
+**Development** (auto-restarts when you save a file):
+
+```bash
+npm run dev
+```
+
+**Production** (compile to JavaScript, then run it):
+
+```bash
+npm run build
+npm start
+```
+
+The server listens on <http://localhost:3000>.
+
+## Verify it works
 
 ```bash
 curl -i http://localhost:3000/health
-# HTTP/1.1 200 OK
-# {"status":"ok"}
-
-curl -i http://localhost:3000/nope
-# HTTP/1.1 404 Not Found... {"error":"Not found"}
 ```
 
-Also confirmed `npm run dev` serves the same responses.
+Expected: `HTTP/1.1 200 OK` with body `{"status":"ok"}`. Any other path returns `404`.
 
----
+Sign up and log in. Both need the database running and migrated (see "Database" above). Send the body as JSON, with the `Content-Type` header.
 
-## Project structure
+Create an account:
 
-```
-marketplace_api/
-├── src/
-│   └── index.ts        # HTTP server (entry point)
-├── dist/               # compiled JS (generated, git-ignored)
-├── node_modules/       # dependencies (generated, git-ignored)
-├── .gitignore
-├── package.json        # project metadata, scripts, dependencies
-├── package-lock.json   # exact dependency versions (commit this)
-├── tsconfig.json       # TypeScript configuration
-└── README.md
+```bash
+curl -i -X POST http://localhost:3000/auth/signup -H "Content-Type: application/json" -d '{"email":"ana@example.com","password":"secret123"}'
 ```
 
-## Development vs production
+Log in:
 
-- **Development**: `npm run dev` runs TypeScript directly through `tsx` and restarts on every save.
-- **Production**: `npm run build` then `npm start`. Node runs the plain JavaScript in `dist/`; TypeScript is no longer involved.
+```bash
+curl -i -X POST http://localhost:3000/auth/login -H "Content-Type: application/json" -d '{"email":"ana@example.com","password":"secret123"}'
+```
 
-## Roadmap (learning path)
+| Request | Response |
+| --- | --- |
+| Signup with a new email | `201` with `{"token":"eyJ..."}` (a JWT valid for 1 hour) |
+| Signup with an email that already exists | `409` with `{"error":"Email is already registered"}` |
+| Login with the right email + password | `200` with `{"token":"eyJ..."}` (a JWT valid for 1 hour) |
+| Login with an unknown email or wrong password | `401` with `{"error":"Invalid email or password"}` |
+| Missing/invalid email or missing password | `400` with e.g. `{"error":"Email is required"}` |
+| Malformed JSON | `400` with `{"error":"Bad Request"}` |
 
-- [ ] 1. Write a small router by hand (parse URL, method, query string)
-- [ ] 2. Read JSON request bodies (collect the stream chunks, parse, validate)
-- [ ] 3. `GET/POST/PUT/DELETE /products` using an in-memory array
-- [ ] 4. Split code into modules (routes, handlers, types)
-- [ ] 5. Add a database (SQLite, then PostgreSQL)
-- [ ] 6. Authentication (password hashing, JWT)
-- [ ] 7. Image upload for product photos
-- [ ] 8. Error handling, validation, and tests
-- [ ] 9. Connect the Flutter app
+> From the Flutter app on an **Android emulator**, `localhost` is the emulator itself. Use `http://10.0.2.2:3000` to reach your computer. On the iOS simulator, `localhost` works.
 
-## Notes / learning log
+## Check the code (run after every change)
 
-Add what you learn here as the project grows.
+```bash
+npm run check
+```
+
+This runs type checking, lint, and tests, and stops at the first failure.
+
+## All scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Run `src/index.ts` with auto-restart on save (loads `.env`) |
+| `npm run build` | Compile `src/` (TypeScript) to `dist/` (JavaScript) |
+| `npm start` | Run the compiled build (`dist/index.js`), loading `.env` if it exists |
+| `npm run typecheck` | Check types without producing files |
+| `npm run lint` | Find code problems with ESLint |
+| `npm run lint:fix` | Fix the lint problems that can be fixed automatically |
+| `npm test` | Run all tests (`src/**/*.test.ts`), skipping the ones that need the database |
+| `npm run test:db` | Run all tests, including the database ones (needs the database running) |
+| `npm run check` | `typecheck` + `lint` + `test` |
+| `npm run db:generate` | After changing `schema.ts`: write a new SQL migration in `drizzle/` |
+| `npm run db:migrate` | Apply pending migrations to the database |
+
+## Keeping dependencies safe
+
+```bash
+npm audit
+npm outdated
+```
+
+`npm outdated` lists TypeScript as outdated on purpose: it is pinned to 6.0.x (see [DECISIONS.md, D-009](DECISIONS.md#d-009-typescript-pinned-to-60x)).

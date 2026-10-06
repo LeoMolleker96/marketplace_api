@@ -1,22 +1,41 @@
 {
   "name": "marketplace-api",
   "version": "1.0.0",
-  "description": "Marketplace backend (vanilla Node.js + TypeScript)",
+  "description": "Marketplace backend (Node.js + TypeScript, hexagonal architecture)",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test:db": "tsx --env-file=.env --test \"src/**/*.test.ts\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^10.12.0",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.2.1",
+    "drizzle-orm": "^0.45.3",
+    "express": "^5.2.1",
+    "jose": "^6.2.12",
+    "pg": "^8.23.1"
   }
 }
